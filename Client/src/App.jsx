@@ -128,7 +128,7 @@ const App = () => {
     const username = result.value;
     setPlayerName(username);
 
-    const newSocket = io("http://localhost:3000", {
+    const newSocket = io("https://socket-io-server-u3v3.onrender.com", {
       autoConnect: true,
     });
 
