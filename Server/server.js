@@ -1,15 +1,19 @@
-const { createServer } = require("http");
+const http  = require("http");
 const { Server } = require("socket.io");
+const dotenv = require("dotenv");
 
-const httpServer = createServer();
-const io = new Server(httpServer, {
-  cors: "http://localhost:5174/",
+dotenv.config();
+
+const server = http.createServer();
+const io = new Server(server, {
+  cors: "https://react-tic-tac-toe-socket.vercel.app/",
 });
 
-const allUsers = {};
-const allRooms = [];
+const allUsers = {}; // Object to store all connected users
+const allRooms = {}; // Object to store all created rooms
 
 io.on("connection", (socket) => {
+  // When a new user connects, add them to the allUsers object
   allUsers[socket.id] = {
     socket: socket,
     online: true,
@@ -19,45 +23,49 @@ io.on("connection", (socket) => {
     const currentUser = allUsers[socket.id];
     currentUser.playerName = data.playerName;
 
-    let opponentPlayer;
+    const roomId = data.roomId;
+    let room = allRooms[roomId];
 
-    for (const key in allUsers) {
-      const user = allUsers[key];
-      if (user.online && !user.playing && socket.id !== key) {
-        opponentPlayer = user;
-        break;
-      }
+    // If the room doesn't exist, create it with the current user as player1
+    if (!room) {
+      room = allRooms[roomId] = {
+        player1: currentUser,
+        player2: null
+      };
+    } else if (!room.player2) {
+      // If the room exists and player2 slot is empty, add current user as player2
+      room.player2 = currentUser;
+    } else {
+      // If the room is full, emit "RoomFull" event to the current user
+      currentUser.socket.emit("RoomFull");
+      return;
     }
 
-    if (opponentPlayer) {
-      allRooms.push({
-        player1: opponentPlayer,
-        player2: currentUser,
-      });
+    currentUser.playing = true;
 
-      currentUser.socket.emit("OpponentFound", {
-        opponentName: opponentPlayer.playerName,
+    // If both players are present, emit "OpponentFound" event to both players
+    if (room.player2) {
+      room.player1.socket.emit("OpponentFound", {
+        opponentName: room.player2.playerName,
         playingAs: "circle",
       });
 
-      opponentPlayer.socket.emit("OpponentFound", {
-        opponentName: currentUser.playerName,
+      room.player2.socket.emit("OpponentFound", {
+        opponentName: room.player1.playerName,
         playingAs: "cross",
       });
 
-      currentUser.socket.on("playerMoveFromClient", (data) => {
-        opponentPlayer.socket.emit("playerMoveFromServer", {
-          ...data,
-        });
+      // Relay player moves between players
+      room.player1.socket.on("playerMoveFromClient", (data) => {
+        room.player2.socket.emit("playerMoveFromServer", { ...data });
       });
 
-      opponentPlayer.socket.on("playerMoveFromClient", (data) => {
-        currentUser.socket.emit("playerMoveFromServer", {
-          ...data,
-        });
+      room.player2.socket.on("playerMoveFromClient", (data) => {
+        room.player1.socket.emit("playerMoveFromServer", { ...data });
       });
     } else {
-      currentUser.socket.emit("OpponentNotFound");
+      // If only one player is present, emit "WaitingForOpponent" event to that player
+      currentUser.socket.emit("WaitingForOpponent");
     }
   });
 
@@ -66,20 +74,30 @@ io.on("connection", (socket) => {
     currentUser.online = false;
     currentUser.playing = false;
 
-    for (let index = 0; index < allRooms.length; index++) {
-      const { player1, player2 } = allRooms[index];
-
-      if (player1.socket.id === socket.id) {
-        player2.socket.emit("opponentLeftMatch");
+    // Iterate through all rooms to find the room where the disconnected user was playing
+    for (const roomId in allRooms) {
+      const room = allRooms[roomId];
+      if (room.player1 && room.player1.socket.id === socket.id) {
+        if (room.player2) {
+          // If the disconnected player was player1, notify player2 about opponent's disconnection
+          room.player2.socket.emit("opponentLeftMatch");
+          delete allRooms[roomId];
+        }
         break;
-      }
-
-      if (player2.socket.id === socket.id) {
-        player1.socket.emit("opponentLeftMatch");
+      } else if (room.player2 && room.player2.socket.id === socket.id) {
+        if (room.player1) {
+          // If the disconnected player was player2, notify player1 about opponent's disconnection
+          room.player1.socket.emit("opponentLeftMatch");
+          delete allRooms[roomId];
+        }
         break;
       }
     }
   });
 });
 
-httpServer.listen(3000);
+const PORT = process.env.PORT || 3001;
+
+server.listen(PORT, () => {
+	console.log(`Server Running on port ${PORT}`);
+});
