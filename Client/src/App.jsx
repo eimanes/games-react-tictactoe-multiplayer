@@ -13,13 +13,14 @@ const renderFrom = [
 const App = () => {
   const [gameState, setGameState] = useState(renderFrom);
   const [currentPlayer, setCurrentPlayer] = useState("circle");
-  const [finishedState, setFinishetState] = useState(false);
+  const [finishedState, setFinishedState] = useState(false);
   const [finishedArrayState, setFinishedArrayState] = useState([]);
   const [playOnline, setPlayOnline] = useState(false);
   const [socket, setSocket] = useState(null);
   const [playerName, setPlayerName] = useState("");
   const [opponentName, setOpponentName] = useState(null);
   const [playingAs, setPlayingAs] = useState(null);
+  const [roomId, setRoomId] = useState("");
 
   const checkWinner = () => {
     // row dynamic
@@ -70,7 +71,7 @@ const App = () => {
   useEffect(() => {
     const winner = checkWinner();
     if (winner) {
-      setFinishetState(winner);
+      setFinishedState(winner);
     }
   }, [gameState]);
 
@@ -89,8 +90,23 @@ const App = () => {
     return result;
   };
 
+  const takeRoomId = async () => {
+    const result = await Swal.fire({
+      title: "Enter Room ID",
+      input: "text",
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) {
+          return "You need to write something!";
+        }
+      },
+    });
+
+    return result;
+  };
+
   socket?.on("opponentLeftMatch", () => {
-    setFinishetState("opponentLeftMatch");
+    setFinishedState("opponentLeftMatch");
   });
 
   socket?.on("playerMoveFromServer", (data) => {
@@ -120,20 +136,30 @@ const App = () => {
 
   async function playOnlineClick() {
     const result = await takePlayerName();
+    const roomResult = await takeRoomId();
 
     if (!result.isConfirmed) {
+      return;
+    }
+
+    if (!roomResult.isConfirmed) {
       return;
     }
 
     const username = result.value;
     setPlayerName(username);
 
-    const newSocket = io("https://socket-io-server-u3v3.onrender.com", {
+    const roomname = roomResult.value;
+    setRoomId(roomname)
+
+    const newSocket = io("http://localhost:3001", {
+    // const newSocket = io("https://socket-io-server-u3v3.onrender.com", {
       autoConnect: true,
     });
 
     newSocket?.emit("request_to_play", {
       playerName: username,
+      roomId: roomname // Pass the roomId to the server
     });
 
     setSocket(newSocket);
