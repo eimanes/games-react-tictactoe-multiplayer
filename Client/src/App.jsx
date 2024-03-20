@@ -152,8 +152,8 @@ const App = () => {
     const roomname = roomResult.value;
     setRoomId(roomname)
 
-    const newSocket = io("http://localhost:3001", {
-    // const newSocket = io("https://socket-io-server-u3v3.onrender.com", {
+    // const newSocket = io("http://localhost:3001", {
+    const newSocket = io("https://socket-io-server-u3v3.onrender.com", {
       autoConnect: true,
     });
 
